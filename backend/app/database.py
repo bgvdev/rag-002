@@ -1,4 +1,3 @@
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -25,8 +24,5 @@ async def get_db():
         yield db
 
 
-async def init_db():
-    """Run once on startup: enable pgvector, then create missing tables."""
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await conn.run_sync(Base.metadata.create_all)
+# Note: tables are NOT created here anymore.
+# The schema is managed by Alembic migrations:  alembic upgrade head

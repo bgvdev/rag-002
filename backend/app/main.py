@@ -1,11 +1,8 @@
 import logging
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import init_db
-from app.models import chunk, document  # noqa: F401  (import = register tables on Base)
 from app.routes import chat, documents, health
 
 # Logging: print our app's log messages in the terminal (with time + level + file)
@@ -14,17 +11,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Runs once when the server starts
-    await init_db()
-    yield
-    # (code after yield would run when the server stops)
-
-
 # Create the FastAPI application
-app = FastAPI(title="RAG API", lifespan=lifespan)
+# (database tables are created/updated by Alembic: run "alembic upgrade head")
+app = FastAPI(title="RAG API")
 
 # CORS: allow the React dev server (Vite runs on port 5173) to call this API
 app.add_middleware(
