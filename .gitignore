@@ -1,0 +1,17 @@
+# ---- Secrets (never commit) ----
+.env
+*.env
+
+# ---- Python ----
+venv/
+__pycache__/
+*.pyc
+
+# ---- Node / Vite ----
+node_modules/
+dist/
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+.DS_Store

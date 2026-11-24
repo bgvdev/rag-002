@@ -1,0 +1,18 @@
+# Web API
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Settings (.env)
+python-dotenv
+
+# Database: Postgres + pgvector
+sqlalchemy[asyncio]
+psycopg[binary]
+pgvector
+
+# LLM (OpenRouter uses the OpenAI-compatible API)
+openai
+
+# Reading PDF files
+pypdf
