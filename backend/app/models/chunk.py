@@ -1,5 +1,5 @@
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey, Integer, Text
+from sqlalchemy import ForeignKey, Index, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app import config
@@ -27,3 +27,15 @@ class Chunk(Base):
 
     # The embedding: 1536 numbers that represent the meaning of 'content'
     embedding = mapped_column(Vector(config.EMBEDDING_DIM), nullable=False)
+
+    # HNSW index: makes "find the closest vectors" fast on large tables.
+    # vector_cosine_ops = build it for cosine distance (the <=> we search with).
+    __table_args__ = (
+        Index(
+            "ix_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
