@@ -1,3 +1,6 @@
+import json
+from collections.abc import AsyncIterator
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
@@ -39,29 +42,63 @@ async def ingest_file(db: AsyncSession, filename: str, data: bytes) -> UploadRes
     )
 
 
-async def answer_question(db: AsyncSession, question: str, top_k: int = 3) -> AskResponse:
-    """Ask pipeline: question -> vector -> similar chunks -> prompt -> LLM answer."""
+NO_DOCUMENTS_MESSAGE = "No documents uploaded yet. Please upload a file first."
 
-    # 1. Question -> vector (same embedding model as the chunks)
+
+# ---------- Shared steps (used by both normal and streaming answers) ----------
+
+async def retrieve(db: AsyncSession, question: str, top_k: int = 3) -> list[dict]:
+    """Retrieval: question -> vector -> most similar chunks from pgvector."""
     query_vector = await embedding_service.embed_text(question)
+    return await chunk_repository.search_similar(db, query_vector, top_k)
 
-    # 2. Find the most similar chunks in pgvector
-    results = await chunk_repository.search_similar(db, query_vector, top_k)
-    if not results:
-        return AskResponse(answer="No documents uploaded yet. Please upload a file first.")
 
-    # 3. Build the context block from those chunks
+def build_prompt(question: str, results: list[dict]) -> str:
+    """Put the retrieved chunks + the question into one prompt for the LLM."""
     context = "\n\n".join(
         f"[Source {i}: {r['filename']}]\n{r['content']}"
         for i, r in enumerate(results, start=1)
     )
-    prompt = f"Context:\n{context}\n\nQuestion: {question}"
+    return f"Context:\n{context}\n\nQuestion: {question}"
 
-    # 4. Ask the LLM, grounded in the context
+
+# ---------- Normal answer (whole answer at once) ----------
+
+async def answer_question(db: AsyncSession, question: str, top_k: int = 3) -> AskResponse:
+    """Ask pipeline: retrieve -> build prompt -> LLM answer."""
+    results = await retrieve(db, question, top_k)
+    if not results:
+        return AskResponse(answer=NO_DOCUMENTS_MESSAGE)
+
+    prompt = build_prompt(question, results)
     answer = await llm_service.ask_llm(prompt, system_prompt=SYSTEM_PROMPT)
 
     sources = [Source(**r) for r in results]
     return AskResponse(answer=answer, sources=sources)
+
+
+# ---------- Streaming answer (piece by piece) ----------
+
+def to_ndjson(event: dict) -> str:
+    """One event = one line of JSON (NDJSON format)."""
+    return json.dumps(event) + "\n"
+
+
+async def stream_answer(question: str, results: list[dict]) -> AsyncIterator[str]:
+    """Yield NDJSON lines: first the sources, then answer pieces, then 'done'.
+    Retrieval is done BEFORE this (in the route), so no database is used here."""
+    if not results:
+        yield to_ndjson({"type": "token", "text": NO_DOCUMENTS_MESSAGE})
+        yield to_ndjson({"type": "done"})
+        return
+
+    yield to_ndjson({"type": "sources", "sources": results})
+
+    prompt = build_prompt(question, results)
+    async for piece in llm_service.stream_llm(prompt, system_prompt=SYSTEM_PROMPT):
+        yield to_ndjson({"type": "token", "text": piece})
+
+    yield to_ndjson({"type": "done"})
 
 
 async def list_documents(db: AsyncSession) -> list[Document]:

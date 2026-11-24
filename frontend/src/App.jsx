@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { askQuestion, deleteDocument, listDocuments } from "./api";
+import { askQuestionStream, deleteDocument, listDocuments } from "./api";
 import AnswerCard from "./components/AnswerCard";
 import AskForm from "./components/AskForm";
 import BackendStatus from "./components/BackendStatus";
@@ -48,9 +48,16 @@ function App() {
     setSources([]);
 
     try {
-      const data = await askQuestion(question);
-      setAnswer(data.answer);
-      setSources(data.sources);
+      await askQuestionStream(question, (event) => {
+        if (event.type === "sources") {
+          setSources(event.sources);
+        } else if (event.type === "token") {
+          setAnswer((prev) => prev + event.text); // append the new piece
+        } else if (event.type === "error") {
+          setError(event.message);
+        }
+        // "done": nothing to do, the loop in api.js ends by itself
+      });
     } catch (err) {
       setError(err.message);
     } finally {
