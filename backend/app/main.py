@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
 from app.models import chunk, document  # noqa: F401  (import = register tables on Base)
 from app.routes import chat, documents, health
+
+# Logging: print our app's log messages in the terminal (with time + level + file)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 
 @asynccontextmanager
