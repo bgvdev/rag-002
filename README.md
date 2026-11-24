@@ -16,12 +16,14 @@ A beginner-friendly **Retrieval-Augmented Generation (RAG)** app. Upload `.txt` 
 - Answers show their **sources** (filename, similarity score, chunk text)
 - **Safe error handling:** full errors and tracebacks are logged on the server, users see short generic messages
 - Fully **async** backend: FastAPI, SQLAlchemy async, `AsyncOpenAI`
+- **Database migrations** with Alembic (schema history in `backend/alembic/versions/`)
 
 ## Tech stack
 
 | Part | Tech |
 |---|---|
 | Backend | FastAPI (async), SQLAlchemy 2.1 (async) + psycopg 3 |
+| Migrations | Alembic |
 | Database | PostgreSQL 16 + pgvector |
 | LLM + embeddings | OpenRouter (OpenAI-compatible API) |
 | Frontend | React + Vite |
@@ -29,10 +31,17 @@ A beginner-friendly **Retrieval-Augmented Generation (RAG)** app. Upload `.txt` 
 ## Project structure
 
 ```
+backend/
+├── alembic.ini        # Alembic settings (DB URL comes from .env, not this file)
+├── alembic/
+│   ├── env.py         # connects Alembic to our DB URL + models
+│   └── versions/      # migration files (schema history)
+└── app/
+    └── ...            # see below
 backend/app/
-├── main.py            # app, logging, CORS, routers, create tables on startup
+├── main.py            # app, logging, CORS, routers
 ├── config.py          # settings from .env
-├── database.py        # async engine, sessions, pgvector extension
+├── database.py        # async engine, sessions
 ├── models/            # SQLAlchemy tables: documents, chunks
 ├── schemas/           # Pydantic request/response shapes
 ├── repositories/      # database queries (incl. vector search)
@@ -55,13 +64,7 @@ frontend/src/
 ```bash
 sudo -u postgres psql -c "CREATE DATABASE rag_db_002;"
 ```
-The `vector` extension, tables, and the HNSW index are created automatically when the backend starts.
-
-> **Existing database from an older version?** `create_all` does not add indexes to tables that already exist. Create the HNSW index once by hand:
-> ```sql
-> CREATE INDEX IF NOT EXISTS ix_chunks_embedding_hnsw ON chunks
-> USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-> ```
+The `vector` extension, tables, and indexes are created by Alembic migrations (step 2).
 
 ### 2. Backend
 ```bash
@@ -78,11 +81,44 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=openai/gpt-4o-mini
 EMBEDDING_MODEL=openai/text-embedding-3-small
 ```
-Run:
+Create / update the database schema, then run the app (always from `backend/`):
 ```bash
+alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 API docs: http://localhost:8000/docs
+
+> **Database created by an older version of this project** (tables made by `create_all`, before Alembic)? Don't run `upgrade` on it, because the tables already exist. Make sure the HNSW index exists, then mark the database as up to date once:
+> ```sql
+> CREATE INDEX IF NOT EXISTS ix_chunks_embedding_hnsw ON chunks
+> USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+> ```
+> ```bash
+> alembic stamp head
+> ```
+
+## Database migrations (Alembic)
+
+The schema is managed only by migrations; the app never creates tables itself. To change it:
+
+```bash
+# 1. Edit a model in app/models/, then let Alembic write the migration
+alembic revision --autogenerate -m "describe the change"
+
+# 2. Review the new file in alembic/versions/ (autogenerate isn't perfect)
+
+# 3. Apply it
+alembic upgrade head
+```
+
+| Command | What it does |
+|---|---|
+| `alembic upgrade head` | Apply all pending migrations |
+| `alembic downgrade -1` | Undo the last migration |
+| `alembic current` | Show which migration the database is on |
+| `alembic history` | List all migrations |
+| `alembic check` | Report whether models and database differ |
+| `alembic upgrade head --sql` | Print the SQL without running it |
 
 ### 3. Frontend
 ```bash
@@ -133,4 +169,3 @@ Upload `sample_policy.txt` and ask:
 - [ ] **Chunk counts** in the document list
 - [ ] **Smarter chunking:** split on sentences or paragraphs instead of fixed characters
 - [ ] **Chat history:** keep previous questions and answers on screen
-- [ ] **Database migrations** with Alembic instead of `create_all` (would also apply new indexes to existing databases)
