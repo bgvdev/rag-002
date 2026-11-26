@@ -14,10 +14,35 @@ export async function askQuestion(question) {
 // Streaming RAG: calls onEvent(event) for every line the backend sends.
 // Events: { type: "sources" | "token" | "done" | "error", ... }
 export async function askQuestionStream(question, onEvent) {
-  const response = await fetch(`${API_URL}/chat/stream`, {
+  return postAndReadNdjson("/chat/stream", { question }, onEvent);
+}
+
+// Agent: the LLM decides when/what to search (tool calling).
+// Not streamed: the backend runs all tool rounds first, then returns everything.
+export async function askAgent(question) {
+  const response = await fetch(`${API_URL}/chat/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question }),
+  });
+  return handleResponse(response); // -> { answer, sources, steps: [{ round, tool, arguments }] }
+}
+
+// Agent, streamed: same events as askQuestionStream, plus a "step" event
+// for every tool call, sent live while the agent works.
+// Events: { type: "step" | "sources" | "token" | "done" | "error", ... }
+export async function askAgentStream(question, onEvent) {
+  return postAndReadNdjson("/chat/agent/stream", { question }, onEvent);
+}
+
+// ---------- Shared NDJSON stream reader (not exported) ----------
+
+// POST `body` to `path`, then call onEvent(event) for every JSON line as it arrives.
+async function postAndReadNdjson(path, body, onEvent) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -44,15 +69,4 @@ export async function askQuestionStream(question, onEvent) {
       }
     }
   }
-}
-
-// Agent: the LLM decides when/what to search (tool calling).
-// Not streamed: the backend runs all tool rounds first, then returns everything.
-export async function askAgent(question) {
-  const response = await fetch(`${API_URL}/chat/agent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
-  });
-  return handleResponse(response); // -> { answer, sources, steps: [{ round, tool, arguments }] }
 }

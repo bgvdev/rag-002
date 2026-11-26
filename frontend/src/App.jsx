@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { askAgent, askQuestionStream, deleteDocument, listDocuments } from "./api";
+import { askAgentStream, askQuestionStream, deleteDocument, listDocuments } from "./api";
 import AnswerCard from "./components/AnswerCard";
 import AskForm from "./components/AskForm";
 import BackendStatus from "./components/BackendStatus";
@@ -7,6 +7,14 @@ import DocumentList from "./components/DocumentList";
 import Loader from "./components/Loader";
 import UploadForm from "./components/UploadForm";
 import "./App.css";
+
+// Friendly loader text for each agent tool (unknown tools fall back to their raw name)
+const STEP_LABELS = {
+  search_documents: "🔍 Searching the documents",
+  list_documents: "📂 Listing your documents",
+  read_document: "📖 Reading a document",
+  get_neighbouring_chunks: "🧩 Reading the text around a match",
+};
 
 function App() {
   // ---------- Documents ----------
@@ -46,37 +54,30 @@ function App() {
 
   async function handleAsk(question, agentMode) {
     setLoading(true);
-    setLoadingMessage(
-      agentMode
-        ? "Agent is working: searching and reading your documents..."
-        : "Thinking..."
-    );
+    setLoadingMessage(agentMode ? "Agent is thinking..." : "Thinking...");
     setError("");
     setAnswer("");
     setSources([]);
-    setSteps(null);
+    setSteps(agentMode ? [] : null); // [] = agent with no steps yet; null = normal mode
+
+    // One handler for BOTH modes: they send the same events, the agent just adds "step"
+    function handleEvent(event) {
+      if (event.type === "step") {
+        setSteps((prev) => [...prev, event]); // add this tool call to the list
+        setLoadingMessage(`Round ${event.round}: ${STEP_LABELS[event.tool] || event.tool}...`);
+      } else if (event.type === "sources") {
+        setSources(event.sources);
+      } else if (event.type === "token") {
+        setAnswer((prev) => prev + event.text); // append the new piece
+      } else if (event.type === "error") {
+        setError(event.message);
+      }
+      // "done": nothing to do, the loop in api.js ends by itself
+    }
 
     try {
-      if (agentMode) {
-        // Agent: one request, the backend runs the tool loop, everything comes back at once
-        const result = await askAgent(question);
-        setSteps(result.steps);
-        setSources(result.sources);
-        setAnswer(result.answer);
-        return; // "finally" below still runs
-      }
-
-      // Normal: streaming RAG (unchanged)
-      await askQuestionStream(question, (event) => {
-        if (event.type === "sources") {
-          setSources(event.sources);
-        } else if (event.type === "token") {
-          setAnswer((prev) => prev + event.text); // append the new piece
-        } else if (event.type === "error") {
-          setError(event.message);
-        }
-        // "done": nothing to do, the loop in api.js ends by itself
-      });
+      const ask = agentMode ? askAgentStream : askQuestionStream;
+      await ask(question, handleEvent);
     } catch (err) {
       setError(err.message);
     } finally {
