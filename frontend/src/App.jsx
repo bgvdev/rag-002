@@ -4,6 +4,7 @@ import AnswerCard from "./components/AnswerCard";
 import AskForm from "./components/AskForm";
 import BackendStatus from "./components/BackendStatus";
 import DocumentList from "./components/DocumentList";
+import Loader from "./components/Loader";
 import UploadForm from "./components/UploadForm";
 import "./App.css";
 
@@ -40,10 +41,16 @@ function App() {
   const [sources, setSources] = useState([]);
   const [steps, setSteps] = useState(null); // agent tool calls; null = normal mode
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState("");
 
   async function handleAsk(question, agentMode) {
     setLoading(true);
+    setLoadingMessage(
+      agentMode
+        ? "Agent is working: searching and reading your documents..."
+        : "Thinking..."
+    );
     setError("");
     setAnswer("");
     setSources([]);
@@ -86,6 +93,8 @@ function App() {
       <DocumentList documents={documents} onDelete={handleDelete} />
 
       <AskForm onAsk={handleAsk} loading={loading} />
+      {/* Loader until the first answer text (or an error) arrives */}
+      {loading && !answer && !error && <Loader message={loadingMessage} />}
       <AnswerCard answer={answer} sources={sources} steps={steps} error={error} />
     </div>
   );

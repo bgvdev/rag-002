@@ -149,6 +149,43 @@ button:disabled {
   }
 }
 
+/* ---------- Loader (shown while waiting for an answer) ---------- */
+.loader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* A circle with one coloured side, rotating = spinner */
+.spinner {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Users who turned on "reduce motion" in their OS: slow pulse instead of spinning */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
 /* ---------- Document list ---------- */
 .doc-list {
   list-style: none;
