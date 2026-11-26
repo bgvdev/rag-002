@@ -40,3 +40,22 @@ async def stream_llm(
     async for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
+
+
+async def chat_with_tools(messages: list[dict], tools: list[dict]):
+    """One round of a tool-calling conversation.
+
+    Unlike ask_llm, this takes the WHOLE message history (the agent loop keeps
+    adding to it) plus the tool definitions, and returns the full message object,
+    because the reply may be either:
+      - text:        message.content has the answer, message.tool_calls is None
+      - tool calls:  message.tool_calls is a list of {id, function: {name, arguments}}
+    """
+    response = await client.chat.completions.create(
+        model=config.LLM_MODEL,
+        messages=messages,
+        tools=tools,          # the JSON schemas from tools.py
+        tool_choice="auto",   # the model decides: call tool(s) or answer directly
+        temperature=0.2,
+    )
+    return response.choices[0].message

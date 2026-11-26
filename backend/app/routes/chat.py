@@ -5,8 +5,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.schemas.chat import AskRequest, AskResponse
-from app.services import rag_service
+from app.schemas.chat import AgentResponse, AskRequest, AskResponse
+from app.services import agent_service, rag_service
 
 logger = logging.getLogger(__name__)  # name = "app.routes.chat"
 
@@ -53,3 +53,17 @@ async def ask_stream(request: AskRequest, db: AsyncSession = Depends(get_db)):
             )
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
+@router.post("/agent", response_model=AgentResponse)
+async def ask_agent(request: AskRequest, db: AsyncSession = Depends(get_db)):
+    # Agent: the LLM decides WHEN and WHAT to search (tool calling),
+    # instead of our code always searching the raw question first.
+    try:
+        return await agent_service.run_agent(db, request.question)
+    except Exception:
+        logger.exception("Agent failed for question %r", request.question[:100])
+        raise HTTPException(
+            status_code=500,
+            detail="Sorry, something went wrong while answering. Please try again later.",
+        )

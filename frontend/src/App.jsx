@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { askQuestionStream, deleteDocument, listDocuments } from "./api";
+import { askAgent, askQuestionStream, deleteDocument, listDocuments } from "./api";
 import AnswerCard from "./components/AnswerCard";
 import AskForm from "./components/AskForm";
 import BackendStatus from "./components/BackendStatus";
@@ -38,16 +38,28 @@ function App() {
   // ---------- Chat ----------
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState([]);
+  const [steps, setSteps] = useState(null); // agent tool calls; null = normal mode
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleAsk(question) {
+  async function handleAsk(question, agentMode) {
     setLoading(true);
     setError("");
     setAnswer("");
     setSources([]);
+    setSteps(null);
 
     try {
+      if (agentMode) {
+        // Agent: one request, the backend runs the tool loop, everything comes back at once
+        const result = await askAgent(question);
+        setSteps(result.steps);
+        setSources(result.sources);
+        setAnswer(result.answer);
+        return; // "finally" below still runs
+      }
+
+      // Normal: streaming RAG (unchanged)
       await askQuestionStream(question, (event) => {
         if (event.type === "sources") {
           setSources(event.sources);
@@ -74,7 +86,7 @@ function App() {
       <DocumentList documents={documents} onDelete={handleDelete} />
 
       <AskForm onAsk={handleAsk} loading={loading} />
-      <AnswerCard answer={answer} sources={sources} error={error} />
+      <AnswerCard answer={answer} sources={sources} steps={steps} error={error} />
     </div>
   );
 }
