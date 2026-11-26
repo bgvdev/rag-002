@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,18 +26,21 @@ Rules:
 MAX_STEPS = 5  # safety limit: max LLM rounds, so a confused model can't loop forever
 
 
-async def run_agent(db: AsyncSession, question: str) -> dict:
+async def agent_events(db: AsyncSession, question: str) -> AsyncIterator[dict]:
     """The agent loop: LLM -> (tool calls -> results -> LLM)* -> final answer.
 
-    Returns {"answer": str, "sources": [...], "steps": [...]}
-    where "steps" records every tool call so we can show it in the UI.
+    It YIELDS events while it works, instead of returning once at the end:
+      {"type": "step", "round", "tool", "arguments"}   - just before each tool runs
+      {"type": "sources", "sources": [...]}            - chunks found, before the answer
+      {"type": "token", "text": "..."}                 - the final answer
+    Two consumers: the streaming route sends each event live,
+    and run_agent() below collects them into one JSON response.
     """
     # The conversation so far. It GROWS every round; the LLM sees all of it each time.
     messages: list[dict] = [
         {"role": "system", "content": AGENT_SYSTEM_PROMPT},
         {"role": "user", "content": question},
     ]
-    steps: list[dict] = []
     sources: list[dict] = []
 
     for round_number in range(1, MAX_STEPS + 1):
@@ -45,7 +49,9 @@ async def run_agent(db: AsyncSession, question: str) -> dict:
 
         # 2. No tool calls -> this is the final answer. Done!
         if not message.tool_calls:
-            return {"answer": message.content or "", "sources": sources, "steps": steps}
+            yield {"type": "sources", "sources": sources}
+            yield {"type": "token", "text": message.content or ""}
+            return  # in a generator, a bare return just ends it
 
         # 3. Tool calls -> first, record the LLM's request in the history.
         #    The API requires this assistant message to come BEFORE the tool results.
@@ -74,9 +80,11 @@ async def run_agent(db: AsyncSession, question: str) -> dict:
             name = call.function.name
             logger.info("Round %d: tool %s(%s)", round_number, name, call.function.arguments)
 
+            # Announce the step BEFORE running it, so the UI can show "Searching..." meanwhile
+            yield {"type": "step", "round": round_number, "tool": name, "arguments": call.function.arguments}
+
             result = await tools.execute_tool(db, name, call.function.arguments)
 
-            steps.append({"round": round_number, "tool": name, "arguments": call.function.arguments})
             for r in result.get("results", []):  # collect chunks for the UI's source list
                 if r not in sources:
                     sources.append(r)
@@ -93,8 +101,23 @@ async def run_agent(db: AsyncSession, question: str) -> dict:
 
     # Ran out of rounds without a final answer
     logger.warning("Agent hit MAX_STEPS for question %r", question[:100])
-    return {
-        "answer": "Sorry, I couldn't finish answering that. Please try a simpler question.",
-        "sources": sources,
-        "steps": steps,
-    }
+    yield {"type": "sources", "sources": sources}
+    yield {"type": "token", "text": "Sorry, I couldn't finish answering that. Please try a simpler question."}
+
+
+async def run_agent(db: AsyncSession, question: str) -> dict:
+    """Non-streaming version (POST /chat/agent): run the same loop,
+    collect every event, return one dict {"answer", "sources", "steps"}."""
+    answer = ""
+    sources: list[dict] = []
+    steps: list[dict] = []
+
+    async for event in agent_events(db, question):
+        if event["type"] == "step":
+            steps.append({"round": event["round"], "tool": event["tool"], "arguments": event["arguments"]})
+        elif event["type"] == "sources":
+            sources = event["sources"]
+        elif event["type"] == "token":
+            answer += event["text"]
+
+    return {"answer": answer, "sources": sources, "steps": steps}

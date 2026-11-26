@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.schemas.chat import AgentResponse, AskRequest, AskResponse
 from app.services import agent_service, rag_service
 
@@ -67,3 +67,26 @@ async def ask_agent(request: AskRequest, db: AsyncSession = Depends(get_db)):
             status_code=500,
             detail="Sorry, something went wrong while answering. Please try again later.",
         )
+
+
+@router.post("/agent/stream")
+async def ask_agent_stream(request: AskRequest):
+    # Same agent loop as /chat/agent, but each event is sent the moment it happens:
+    # "step" lines while tools run, then "sources", "token" and "done".
+    async def event_stream():
+        try:
+            # The agent uses the DB during the WHOLE stream (every tool call), so the
+            # generator opens its own session. It lives exactly as long as the stream,
+            # instead of depending on when FastAPI closes a Depends(get_db) session.
+            async with SessionLocal() as db:
+                async for event in agent_service.agent_events(db, request.question):
+                    yield rag_service.to_ndjson(event)
+            yield rag_service.to_ndjson({"type": "done"})
+        except Exception:
+            # Status 200 was already sent, so report the error as a line in the stream
+            logger.exception("Agent stream failed for question %r", request.question[:100])
+            yield rag_service.to_ndjson(
+                {"type": "error", "message": "Sorry, the answer was interrupted. Please try again."}
+            )
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
