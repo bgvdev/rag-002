@@ -29,6 +29,17 @@ export async function askQuestion(question) {
   return handleResponse(response); // -> { answer: "...", sources: [...] }
 }
 
+// Agent version: the LLM decides when/what to search (tool calling).
+// Not streamed: the backend runs all tool rounds first, then returns everything.
+export async function askAgent(question) {
+  const response = await fetch(`${API_URL}/chat/agent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  return handleResponse(response); // -> { answer, sources, steps: [{ round, tool, arguments }] }
+}
+
 // Streaming version: calls onEvent(event) for every line the backend sends.
 // Events: { type: "sources" | "token" | "done" | "error", ... }
 export async function askQuestionStream(question, onEvent) {
