@@ -60,7 +60,8 @@ body {
   margin-top: 16px;
 }
 
-input,
+/* Text boxes only: checkboxes/radios must NOT get width: 100% */
+input:not([type="checkbox"]):not([type="radio"]),
 textarea {
   width: 100%;
   box-sizing: border-box;
@@ -97,6 +98,55 @@ button:disabled {
 
 .status-error {
   color: var(--error);
+}
+
+/* ---------- Ask form ---------- */
+.ask-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.ask-footer .hint {
+  flex: 1; /* takes the free space, pushing the Ask button to the right */
+  font-size: 14px;
+}
+
+/* Segmented toggle: [ Normal | Agent ] */
+.mode-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.mode-switch button {
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.mode-switch button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Small screens: stack the hint under the toggle + button */
+@media (max-width: 480px) {
+  .ask-footer {
+    flex-wrap: wrap;
+  }
+  .ask-footer .hint {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .ask-footer button[type="submit"] {
+    margin-left: auto;
+  }
 }
 
 /* ---------- Document list ---------- */

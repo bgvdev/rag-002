@@ -53,3 +53,16 @@ async def search_similar(
         }
         for row in result.all()
     ]
+
+
+async def list_by_document(db: AsyncSession, document_id: int, limit: int) -> list[str]:
+    """A document's chunk texts in READING order (chunk_index), not by similarity.
+    `limit` caps how many chunks we load, so a huge document can't flood the LLM prompt."""
+    query = (
+        select(Chunk.content)
+        .where(Chunk.document_id == document_id)
+        .order_by(Chunk.chunk_index)  # 0, 1, 2, ... = start to end of the file
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    return list(result.scalars().all())
