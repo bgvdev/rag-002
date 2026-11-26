@@ -9,6 +9,7 @@ from app.services import rag_service
 logger = logging.getLogger(__name__)
 
 MAX_READ_CHUNKS = 40  # read_document cap: ~40 x 500 chars = ~20,000 chars (~5k tokens)
+MAX_WINDOW = 3  # get_neighbouring_chunks: at most 3 chunks before + 3 after a hit
 
 # ---------- 1. Tool DEFINITIONS (what the LLM sees) ----------
 # The LLM never sees our Python code. It only sees this JSON schema:
@@ -74,6 +75,31 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_neighbouring_chunks",
+            "description": (
+                "Read the text just before and after a search_documents hit, in reading order. "
+                "Use this when a hit looks cut off or is missing context, e.g. it mentions a project "
+                "but not the company, job title or dates. Pass the chunk_id from the search results."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chunk_id": {
+                        "type": "integer",
+                        "description": "The chunk_id of a search_documents result.",
+                    },
+                    "window": {
+                        "type": "integer",
+                        "description": f"How many chunks to read on EACH side (1-{MAX_WINDOW}). Default 1.",
+                    },
+                },
+                "required": ["chunk_id"],
+            },
+        },
+    },
 ]
 
 
@@ -126,11 +152,31 @@ async def read_document(db: AsyncSession, document_id: int) -> dict:
     return result
 
 
+async def get_neighbouring_chunks(db: AsyncSession, chunk_id: int, window: int = 1) -> dict:
+    window = max(1, min(int(window), MAX_WINDOW))  # never trust LLM input: clamp to 1..MAX_WINDOW
+
+    # 1. Where is this chunk? (which document, which position)
+    hit = await chunk_repository.get_by_id(db, int(chunk_id))
+    if hit is None:
+        return {"error": f"No chunk with chunk_id {chunk_id}. Use a chunk_id from search_documents results."}
+
+    # 2. Read the chunks around it, e.g. hit at index 3, window 1 -> indexes 2, 3, 4
+    chunks = await chunk_repository.list_window(
+        db, hit.document_id, hit.chunk_index - window, hit.chunk_index + window
+    )
+    return {
+        "chunk_id": hit.chunk_id,
+        "hit_chunk_index": hit.chunk_index,  # so the LLM knows which one was the original hit
+        "chunks": chunks,
+    }
+
+
 # Map tool name (string from the LLM) -> Python function
 TOOL_FUNCTIONS = {
     "search_documents": search_documents,
     "list_documents": list_documents,
     "read_document": read_document,
+    "get_neighbouring_chunks": get_neighbouring_chunks,
 }
 
 
