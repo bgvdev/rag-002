@@ -1,171 +1,91 @@
-# RAG Chat: FastAPI + pgvector + React + OpenRouter
+# RAG Chat
 
-A beginner-friendly **Retrieval-Augmented Generation (RAG)** app. Upload `.txt` or `.pdf` documents, ask questions, and get answers **grounded in your documents**, **streamed word by word**, with the source chunks shown under each answer.
+Chat with your own `.txt` and `.pdf` files. Answers come only from your documents and list their sources.
 
-## How it works
+Built with FastAPI, PostgreSQL + pgvector, React, and OpenRouter. The agent uses plain tool calling, with no LangChain or LangGraph.
 
-1. **Ingest:** file → text → overlapping chunks (~500 chars) → embeddings (`openai/text-embedding-3-small`, 1536 dimensions) → stored in Postgres with **pgvector**
-2. **Retrieve:** the question is embedded the same way, and pgvector finds the closest chunks by cosine distance (using an **HNSW index**)
-3. **Generate:** the top chunks are sent with the question to an LLM via **OpenRouter**, with the instruction to answer only from that context. The answer is **streamed** to the browser as it is generated.
+![RAG Chat](docs/screenshots/chat-desktop.png)
 
-## Features
+## Two answer modes
 
-- Upload, list, and delete `.txt` / `.pdf` documents (deleting a document also deletes its chunks)
-- Semantic search with pgvector + **HNSW index** (`vector_cosine_ops`)
-- **Streaming answers** over NDJSON: sources first, then answer tokens
-- Answers show their **sources** (filename, similarity score, chunk text)
-- **Safe error handling:** full errors and tracebacks are logged on the server, users see short generic messages
-- Fully **async** backend: FastAPI, SQLAlchemy async, `AsyncOpenAI`
-- **Database migrations** with Alembic (schema history in `backend/alembic/versions/`)
-
-## Tech stack
-
-| Part | Tech |
+| Mode | How it works |
 |---|---|
-| Backend | FastAPI (async), SQLAlchemy 2.1 (async) + psycopg 3 |
-| Migrations | Alembic |
-| Database | PostgreSQL 16 + pgvector |
-| LLM + embeddings | OpenRouter (OpenAI-compatible API) |
-| Frontend | React + Vite |
+| **Normal** | A fixed pipeline: embed the question, fetch the top 3 chunks from pgvector, then stream the answer. |
+| **Agent** | The LLM decides which tools to call and in what order (parallel or chained, up to 5 rounds). It streams its steps live, remembers the conversation, and asks you before changing anything. |
 
-## Project structure
+### Agent tools
 
-```
-backend/
-├── alembic.ini        # Alembic settings (DB URL comes from .env, not this file)
-├── alembic/
-│   ├── env.py         # connects Alembic to our DB URL + models
-│   └── versions/      # migration files (schema history)
-└── app/
-    └── ...            # see below
-backend/app/
-├── main.py            # app, logging, CORS, routers
-├── config.py          # settings from .env
-├── database.py        # async engine, sessions
-├── models/            # SQLAlchemy tables: documents, chunks
-├── schemas/           # Pydantic request/response shapes
-├── repositories/      # database queries (incl. vector search)
-├── services/          # text, embedding, LLM (normal + streaming), and RAG logic
-└── routes/            # /health, /documents, /chat
-frontend/src/
-├── api.js             # all backend calls (incl. stream reader)
-├── App.jsx            # shared state + layout
-└── components/        # UploadForm, DocumentList, AskForm, AnswerCard, SourceList, BackendStatus
-```
+| Tool | Purpose |
+|---|---|
+| `search_documents` | Semantic search for specific facts |
+| `list_documents` | List the uploaded files and their ids |
+| `read_document` | Read a whole document in order, for summaries and "list all" questions |
+| `get_neighbouring_chunks` | Read the text around a search result that was cut off |
+| `delete_document` | **Propose** a delete. Nothing happens until you click **Delete** in the chat. |
 
 ## Setup
 
-### Requirements
-- Python 3.12+, Node 20+
-- PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension installed
-- An [OpenRouter API key](https://openrouter.ai/keys)
+You need Python 3.12+, Node 20+, PostgreSQL with [pgvector](https://github.com/pgvector/pgvector), and an [OpenRouter API key](https://openrouter.ai/keys).
 
-### 1. Database
 ```bash
+# 1. Database
 sudo -u postgres psql -c "CREATE DATABASE rag_db_002;"
-```
-The `vector` extension, tables, and indexes are created by Alembic migrations (step 2).
 
-### 2. Backend
-```bash
+# 2. Backend (run from backend/)
 cd backend
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head            # creates the pgvector extension, tables and indexes
+uvicorn app.main:app --reload   # http://localhost:8000/docs
+
+# 3. Frontend (run from frontend/)
+cd frontend
+npm install
+npm run dev                     # http://localhost:5173
 ```
-Create `backend/.env`:
+
+Create `backend/.env` before you run the backend:
+
 ```env
 DATABASE_URL=postgresql://postgres:YOUR_DB_PASSWORD@localhost:5432/rag_db_002
 OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=openai/gpt-4o-mini
 EMBEDDING_MODEL=openai/text-embedding-3-small
 ```
-Create / update the database schema, then run the app (always from `backend/`):
-```bash
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
-```
-API docs: http://localhost:8000/docs
 
-> **Database created by an older version of this project** (tables made by `create_all`, before Alembic)? Don't run `upgrade` on it, because the tables already exist. Make sure the HNSW index exists, then mark the database as up to date once:
-> ```sql
-> CREATE INDEX IF NOT EXISTS ix_chunks_embedding_hnsw ON chunks
-> USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-> ```
-> ```bash
-> alembic stamp head
-> ```
-
-## Database migrations (Alembic)
-
-The schema is managed only by migrations; the app never creates tables itself. To change it:
-
-```bash
-# 1. Edit a model in app/models/, then let Alembic write the migration
-alembic revision --autogenerate -m "describe the change"
-
-# 2. Review the new file in alembic/versions/ (autogenerate isn't perfect)
-
-# 3. Apply it
-alembic upgrade head
-```
-
-| Command | What it does |
-|---|---|
-| `alembic upgrade head` | Apply all pending migrations |
-| `alembic downgrade -1` | Undo the last migration |
-| `alembic current` | Show which migration the database is on |
-| `alembic history` | List all migrations |
-| `alembic check` | Report whether models and database differ |
-| `alembic upgrade head --sql` | Print the SQL without running it |
-
-### 3. Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open http://localhost:5173
+To change the database schema, edit a model and run `alembic revision --autogenerate -m "..."`, then `alembic upgrade head`.
 
 ## API
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Backend status |
-| POST | `/documents/upload` | Upload a `.txt` / `.pdf` (multipart field `file`) |
+| POST | `/documents/upload` | Upload a `.txt` or `.pdf` file (multipart field `file`) |
 | GET | `/documents` | List documents |
-| DELETE | `/documents/{document_id}` | Delete a document and its chunks |
-| POST | `/chat/ask` | `{ "question": "..." }` → `{ answer, sources[] }` (whole answer at once) |
-| POST | `/chat/stream` | `{ "question": "..." }` → NDJSON stream (used by the UI) |
+| DELETE | `/documents/{id}` | Delete a document and its chunks |
+| POST | `/chat/stream` | Normal mode, NDJSON stream |
+| POST | `/chat/agent/stream` | Agent mode, NDJSON stream. Accepts an optional `history` (the last 20 messages). |
+| POST | `/chat/ask`, `/chat/agent` | The same as above, but returned as one JSON response |
 
-### Streaming format (`/chat/stream`)
+The streams send one JSON object per line. Each object has a `type`:
+- `step`: a tool call (Agent mode only)
+- `confirm`: an action waiting for your approval (Agent mode only)
+- `sources`: the chunks used for the answer
+- `token`: a piece of the answer text
+- `done`: the answer is finished
+- `error`: something went wrong
 
-One JSON object per line (`application/x-ndjson`):
+## Project structure
+
 ```
-{"type": "sources", "sources": [{"filename": "...", "content": "...", "score": 0.61}]}
-{"type": "token", "text": "BgvDev"}
-{"type": "token", "text": " employees get 27 days"}
-{"type": "done"}
+backend/app/
+├── routes/         HTTP endpoints
+├── services/       RAG pipeline, agent loop, tools, LLM and embedding calls
+├── repositories/   SQL, including the vector search
+├── models/         SQLAlchemy tables (documents, chunks)
+└── schemas/        Pydantic request and response models
+frontend/src/
+├── api/            backend calls and the NDJSON stream reader
+├── hooks/          useChat (messages, streaming, memory) and useDocuments
+└── components/     chat/ (thread, messages, composer) and sidebar/ (upload, document list)
 ```
-If something fails mid-answer, the stream sends `{"type": "error", "message": "..."}`.
-
-Try it from the terminal (`-N` disables buffering so you see the stream live):
-```bash
-curl -N -X POST http://localhost:8000/chat/stream \
-  -H "Content-Type: application/json" \
-  -d '{"question": "How many days of annual leave do BgvDev employees get?"}'
-```
-
-## Try it
-
-Upload `sample_policy.txt` and ask:
-- *How many days of annual leave do BgvDev employees get?*
-- *What keyboard do new joiners get?*
-- *What is the capital of France?* (should say it's not in the documents)
-
-## Future improvements
-
-- [ ] **Chunk counts** in the document list
-- [ ] **Smarter chunking:** split on sentences or paragraphs instead of fixed characters
-- [ ] **Chat history:** keep previous questions and answers on screen
