@@ -28,11 +28,12 @@ export async function askAgent(question) {
   return handleResponse(response); // -> { answer, sources, steps: [{ round, tool, arguments }] }
 }
 
-// Agent, streamed: same events as askQuestionStream, plus a "step" event
-// for every tool call, sent live while the agent works.
-// Events: { type: "step" | "sources" | "token" | "done" | "error", ... }
-export async function askAgentStream(question, onEvent) {
-  return postAndReadNdjson("/chat/agent/stream", { question }, onEvent);
+// Agent, streamed: same events as askQuestionStream, plus "step" (each tool call)
+// and "confirm" (an action waiting for the user).
+// history = earlier turns, oldest first: [{ role: "user" | "assistant", content }]
+// Events: { type: "step" | "confirm" | "sources" | "token" | "done" | "error", ... }
+export async function askAgentStream(question, onEvent, history = []) {
+  return postAndReadNdjson("/chat/agent/stream", { question, history }, onEvent);
 }
 
 // ---------- Shared NDJSON stream reader (not exported) ----------
