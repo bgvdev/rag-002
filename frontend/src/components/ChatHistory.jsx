@@ -22,14 +22,10 @@ function ChatHistory({ turns, rememberedCount, onNewChat, disabled }) {
         </strong>
         <button
           type="button"
+          className="secondary"
           onClick={onNewChat}
           disabled={disabled}
-          style={{
-            background: "transparent",
-            color: "var(--text)",
-            border: "1px solid var(--border)",
-            padding: "6px 12px",
-          }}
+          style={{ padding: "6px 12px" }} // smaller than a normal button: it sits in a header
         >
           New chat
         </button>

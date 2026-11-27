@@ -8,16 +8,8 @@ import ConfirmAction from "./components/ConfirmAction";
 import DocumentList from "./components/DocumentList";
 import Loader from "./components/Loader";
 import UploadForm from "./components/UploadForm";
+import { getToolInfo } from "./toolInfo";
 import "./App.css";
-
-// Friendly loader text for each agent tool (unknown tools fall back to their raw name)
-const STEP_LABELS = {
-  search_documents: "🔍 Searching the documents",
-  list_documents: "📂 Listing your documents",
-  read_document: "📖 Reading a document",
-  get_neighbouring_chunks: "🧩 Reading the text around a match",
-  delete_document: "🗑️ Preparing a delete request",
-};
 
 // Conversation memory: keep at most this many earlier messages.
 // Must not exceed MAX_HISTORY_TURNS in backend/app/schemas/chat.py (also 20), or the backend returns 422.
@@ -126,7 +118,8 @@ function App() {
 
       if (event.type === "step") {
         setSteps((prev) => [...prev, event]); // add this tool call to the list
-        setLoadingMessage(`Round ${event.round}: ${STEP_LABELS[event.tool] || event.tool}...`);
+        const { icon, label } = getToolInfo(event.tool);
+        setLoadingMessage(`Round ${event.round}: ${icon} ${label}...`);
       } else if (event.type === "confirm") {
         setPendingAction(event); // show Confirm / Cancel; nothing is changed yet
       } else if (event.type === "sources") {

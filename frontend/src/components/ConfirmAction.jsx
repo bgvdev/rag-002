@@ -32,12 +32,7 @@ function ConfirmAction({ action, onConfirm, onCancel, busy }) {
         Nothing has been changed yet. This cannot be undone.
       </p>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy}
-          style={{ background: "transparent", color: "var(--text)", border: "1px solid var(--border)" }}
-        >
+        <button type="button" className="secondary" onClick={onCancel} disabled={busy}>
           Cancel
         </button>
         <button type="button" className="danger" onClick={onConfirm} disabled={busy}>
