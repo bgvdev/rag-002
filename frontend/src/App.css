@@ -8,6 +8,7 @@
   --primary: #2563eb;
   --ok: #16a34a;
   --error: #dc2626;
+  --bubble: #2563eb; /* user message bubble + active toggle: white text passes contrast in both themes */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,18 +38,6 @@ body {
   width: auto;
   border: none;
   text-align: left;
-}
-
-.app {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 32px 16px;
-}
-
-.app h1 {
-  font-size: 28px;
-  margin: 0 0 8px;
-  color: var(--text);
 }
 
 /* ---------- Reusable pieces for the next steps ---------- */
@@ -100,6 +89,17 @@ button:disabled {
   color: var(--muted);
 }
 
+/* Hidden on screen, still read by screen readers (e.g. a label for an input
+   whose placeholder already says what to type). display:none would hide it from both. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .status-ok {
   color: var(--ok);
 }
@@ -139,7 +139,7 @@ button:disabled {
 }
 
 .mode-switch button.active {
-  background: var(--primary);
+  background: var(--bubble);
   color: #fff;
 }
 
@@ -157,13 +157,7 @@ button:disabled {
   }
 }
 
-/* ---------- Loader (shown while waiting for an answer) ---------- */
-.loader {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
+/* ---------- Spinner (in the live status chip of an answer) ---------- */
 /* A circle with one coloured side, rotating = spinner */
 .spinner {
   width: 20px;
@@ -201,14 +195,68 @@ button:disabled {
   margin: 8px 0 0;
 }
 
+.doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .doc-list li {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-top: 1px solid var(--border);
-  overflow-wrap: anywhere; /* long filenames wrap instead of overflowing */
+  gap: 10px;
+  padding: 6px 4px 6px 8px;
+  border-radius: 8px;
+}
+
+.doc-list li:hover {
+  background: var(--bg);
+}
+
+.doc-icon {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.doc-info {
+  flex: 1;
+  min-width: 0; /* lets the name shrink so the ellipsis can work */
+  display: flex;
+  flex-direction: column;
+}
+
+/* One line, cut with "…" when too long */
+.doc-name {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Square icon-only button (e.g. the trash icon) */
+button.icon-button {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Destructive icon: grey at rest, red when hovered or focused by keyboard */
+button.danger-hover:hover,
+button.danger-hover:focus-visible {
+  color: var(--error);
+  background: var(--card);
 }
 
 button.danger {
@@ -217,4 +265,306 @@ button.danger {
   border: 1px solid var(--error);
   padding: 4px 10px;
   flex-shrink: 0;
+}
+
+/* =====================================================================
+   Chat layout: sidebar (documents) + main (thread + composer)
+   ===================================================================== */
+
+/* index.css gives #root a fixed width: let the chat use the whole window */
+#root {
+  max-width: none;
+  min-height: 100svh;
+}
+
+.layout {
+  display: flex;
+  flex-wrap: wrap; /* on a phone the sidebar stacks above the chat */
+  height: 100svh;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  flex: 0 0 300px; /* fixed width: never shrinks below, never grows beyond 300px */
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-header h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.section-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- Main chat column ---------- */
+.chat-main {
+  flex: 999 1 560px; /* takes all the remaining width */
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.thread {
+  flex: 1;
+  min-height: 0; /* lets the thread scroll inside the column instead of growing it */
+  overflow-y: auto;
+  padding: 24px 32px;
+}
+
+/* All thread content + composer share one readable column width */
+.thread-inner,
+.composer {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.thread-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ---------- Messages ---------- */
+.msg-user {
+  align-self: flex-end;
+  max-width: 75%;
+  padding: 10px 16px;
+  border-radius: 18px 18px 4px 18px;
+  background: var(--bubble);
+  color: #fff;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg-assistant {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.msg-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+/* ---------- Code inside messages ----------
+   index.css (from the Vite template) gives EVERY <code> 15px text, big padding and
+   inline-flex. Inside the chat that's far too large, so reset it here. */
+.msg-body code {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85em; /* relative: stays in proportion in steps (13px) and answers (15px) */
+}
+
+/* A code BLOCK (```...```) in a Markdown answer: scroll sideways instead of overflowing */
+.msg-body pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  overflow-x: auto;
+}
+
+.msg-body pre code {
+  padding: 0;
+  background: none;
+}
+
+/* ---------- Markdown answers (rendered by react-markdown) ---------- */
+.markdown {
+  line-height: 1.6;
+  overflow-wrap: anywhere; /* long URLs/words wrap instead of widening the column */
+}
+
+.markdown p {
+  white-space: normal; /* Markdown already turns line breaks into <p>/<br> */
+  margin: 0 0 10px;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.markdown li {
+  margin: 4px 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: 14px 0 8px;
+  font-size: 16px;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0; /* no extra gap under the last paragraph/list */
+}
+
+.markdown a {
+  color: var(--primary);
+}
+
+.avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* Small rounded pill: steps toggle, source chips, live status */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+button.chip {
+  cursor: pointer;
+}
+
+/* The live "Round 1 · Searching..." line while the agent works */
+.status-line .spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+/* ---------- Empty state (new chat) ---------- */
+.empty-state {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+}
+
+.empty-state h2 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.suggestions {
+  width: 100%;
+  max-width: 640px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.suggestions button {
+  min-height: 60px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+}
+
+/* ---------- Composer (question box at the bottom) ---------- */
+.composer-wrap {
+  padding: 0 32px 24px;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.composer textarea {
+  border: none;
+  background: transparent;
+  resize: none;
+  padding: 4px;
+  outline: none;
+}
+
+.composer:focus-within {
+  border-color: var(--primary); /* the whole box lights up while typing */
+}
+
+/* Phones: sidebar stacks on top (page scrolls), chat keeps a full screen, less padding */
+@media (max-width: 640px) {
+  .layout {
+    height: auto;
+  }
+  .sidebar {
+    flex-basis: 100%; /* full width when stacked on a phone */
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .chat-main {
+    height: 100svh;
+  }
+  .thread {
+    padding: 16px;
+  }
+  .composer-wrap {
+    padding: 0 12px 12px;
+  }
+  .msg-user {
+    max-width: 85%;
+  }
 }

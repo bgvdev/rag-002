@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { checkHealth } from "../api";
+import { checkHealth } from "../../api";
 
 // Shows whether the FastAPI backend is reachable.
 function BackendStatus() {
