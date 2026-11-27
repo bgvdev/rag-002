@@ -3,6 +3,7 @@ import { askAgentStream, askQuestionStream, deleteDocument, listDocuments } from
 import AnswerCard from "./components/AnswerCard";
 import AskForm from "./components/AskForm";
 import BackendStatus from "./components/BackendStatus";
+import ChatHistory from "./components/ChatHistory";
 import ConfirmAction from "./components/ConfirmAction";
 import DocumentList from "./components/DocumentList";
 import Loader from "./components/Loader";
@@ -62,6 +63,17 @@ function App() {
   // Conversation memory (agent mode): earlier turns, oldest first.
   // [{ role: "user", content: "..." }, { role: "assistant", content: "..." }, ...]
   const [history, setHistory] = useState([]);
+  // true = the answer on screen was saved as the LAST pair of `history`
+  const [answerSaved, setAnswerSaved] = useState(false);
+
+  // Turns to show in the conversation card: everything EXCEPT the pair that
+  // AnswerCard is already showing (otherwise the latest answer appears twice).
+  const earlierTurns = answerSaved ? history.slice(0, -2) : history;
+
+  function handleNewChat() {
+    setHistory([]);
+    setAnswerSaved(false);
+  }
 
   // ---------- Human-in-the-loop (agent-proposed actions) ----------
   const [pendingAction, setPendingAction] = useState(null); // the "confirm" event, or null
@@ -100,6 +112,7 @@ function App() {
     setSteps(agentMode ? [] : null); // [] = agent with no steps yet; null = normal mode
     setPendingAction(null); // a new question drops any old, unconfirmed proposal
     setActionResult("");
+    setAnswerSaved(false); // the old answer leaves the answer card -> show it in the history
 
     // Local copies for THIS question. React state (answer) updates asynchronously,
     // so after the stream ends we read these instead of the `answer` state.
@@ -140,6 +153,7 @@ function App() {
             { role: "assistant", content: fullAnswer.slice(0, MAX_TURN_CHARS) },
           ].slice(-MAX_HISTORY)
         );
+        setAnswerSaved(true);
       }
     } catch (err) {
       setError(err.message);
@@ -156,22 +170,12 @@ function App() {
       <UploadForm onUploaded={loadDocuments} />
       <DocumentList documents={documents} onDelete={handleDelete} />
 
-      {/* Memory bar: only shown when the agent remembers something */}
-      {history.length > 0 && (
-        <div className="muted" style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
-          <span style={{ flex: 1 }}>
-            💬 Agent mode remembers {history.length / 2} earlier question(s) for follow-ups.
-          </span>
-          <button
-            type="button"
-            onClick={() => setHistory([])}
-            disabled={loading}
-            style={{ background: "transparent", color: "var(--text)", border: "1px solid var(--border)", padding: "6px 12px" }}
-          >
-            New chat
-          </button>
-        </div>
-      )}
+      <ChatHistory
+        turns={earlierTurns}
+        rememberedCount={history.length / 2}
+        onNewChat={handleNewChat}
+        disabled={loading}
+      />
       <AskForm onAsk={handleAsk} loading={loading} />
       {/* Loader until the first answer text (or an error) arrives */}
       {loading && !answer && !error && <Loader message={loadingMessage} />}
