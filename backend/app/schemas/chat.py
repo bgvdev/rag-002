@@ -1,9 +1,24 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+MAX_HISTORY_TURNS = 20  # at most 20 earlier messages (= 10 question/answer pairs)
+MAX_TURN_CHARS = 4000  # each earlier message at most 4000 characters
+
+
+class ChatTurn(BaseModel):
+    """One earlier message in the conversation, sent back by the frontend."""
+    # Only "user" or "assistant": the client must NOT be able to send its own
+    # "system" message (that would let it rewrite the agent's rules).
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=MAX_TURN_CHARS)
 
 
 class AskRequest(BaseModel):
-    """What the frontend sends to POST /chat/ask"""
+    """What the frontend sends to POST /chat/ask, /chat/stream, /chat/agent(/stream)"""
     question: str
+    # Earlier turns, oldest first. Only the agent endpoints use it. Default: no history.
+    history: list[ChatTurn] = Field(default_factory=list, max_length=MAX_HISTORY_TURNS)
 
 
 class Source(BaseModel):

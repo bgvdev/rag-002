@@ -60,7 +60,8 @@ async def ask_agent(request: AskRequest, db: AsyncSession = Depends(get_db)):
     # Agent: the LLM decides WHEN and WHAT to search (tool calling),
     # instead of our code always searching the raw question first.
     try:
-        return await agent_service.run_agent(db, request.question)
+        history = [turn.model_dump() for turn in request.history]  # Pydantic -> plain dicts
+        return await agent_service.run_agent(db, request.question, history)
     except Exception:
         logger.exception("Agent failed for question %r", request.question[:100])
         raise HTTPException(
@@ -73,13 +74,15 @@ async def ask_agent(request: AskRequest, db: AsyncSession = Depends(get_db)):
 async def ask_agent_stream(request: AskRequest):
     # Same agent loop as /chat/agent, but each event is sent the moment it happens:
     # "step" lines while tools run, then "sources", "token" and "done".
+    history = [turn.model_dump() for turn in request.history]  # Pydantic -> plain dicts
+
     async def event_stream():
         try:
             # The agent uses the DB during the WHOLE stream (every tool call), so the
             # generator opens its own session. It lives exactly as long as the stream,
             # instead of depending on when FastAPI closes a Depends(get_db) session.
             async with SessionLocal() as db:
-                async for event in agent_service.agent_events(db, request.question):
+                async for event in agent_service.agent_events(db, request.question, history):
                     yield rag_service.to_ndjson(event)
             yield rag_service.to_ndjson({"type": "done"})
         except Exception:

@@ -18,6 +18,11 @@ const STEP_LABELS = {
   delete_document: "🗑️ Preparing a delete request",
 };
 
+// Conversation memory: keep at most this many earlier messages.
+// Must not exceed MAX_HISTORY_TURNS in backend/app/schemas/chat.py (also 20), or the backend returns 422.
+const MAX_HISTORY = 20;
+const MAX_TURN_CHARS = 4000; // same as MAX_TURN_CHARS in the backend schema
+
 function App() {
   // ---------- Documents ----------
   const [documents, setDocuments] = useState([]);
@@ -53,6 +58,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState("");
+
+  // Conversation memory (agent mode): earlier turns, oldest first.
+  // [{ role: "user", content: "..." }, { role: "assistant", content: "..." }, ...]
+  const [history, setHistory] = useState([]);
 
   // ---------- Human-in-the-loop (agent-proposed actions) ----------
   const [pendingAction, setPendingAction] = useState(null); // the "confirm" event, or null
@@ -92,8 +101,16 @@ function App() {
     setPendingAction(null); // a new question drops any old, unconfirmed proposal
     setActionResult("");
 
+    // Local copies for THIS question. React state (answer) updates asynchronously,
+    // so after the stream ends we read these instead of the `answer` state.
+    let fullAnswer = "";
+    let failed = false;
+
     // One handler for BOTH modes: they send the same events, the agent just adds "step"
     function handleEvent(event) {
+      if (event.type === "token") fullAnswer += event.text;
+      if (event.type === "error") failed = true;
+
       if (event.type === "step") {
         setSteps((prev) => [...prev, event]); // add this tool call to the list
         setLoadingMessage(`Round ${event.round}: ${STEP_LABELS[event.tool] || event.tool}...`);
@@ -111,7 +128,19 @@ function App() {
 
     try {
       const ask = agentMode ? askAgentStream : askQuestionStream;
-      await ask(question, handleEvent);
+      await ask(question, handleEvent, history); // normal mode ignores the 3rd argument
+
+      // Remember this turn (agent mode only, and only if it succeeded).
+      // .slice(-MAX_HISTORY) keeps the LAST 20 messages: the oldest ones drop off.
+      if (agentMode && !failed && fullAnswer) {
+        setHistory((prev) =>
+          [
+            ...prev,
+            { role: "user", content: question.slice(0, MAX_TURN_CHARS) },
+            { role: "assistant", content: fullAnswer.slice(0, MAX_TURN_CHARS) },
+          ].slice(-MAX_HISTORY)
+        );
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -127,6 +156,22 @@ function App() {
       <UploadForm onUploaded={loadDocuments} />
       <DocumentList documents={documents} onDelete={handleDelete} />
 
+      {/* Memory bar: only shown when the agent remembers something */}
+      {history.length > 0 && (
+        <div className="muted" style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+          <span style={{ flex: 1 }}>
+            💬 Agent mode remembers {history.length / 2} earlier question(s) for follow-ups.
+          </span>
+          <button
+            type="button"
+            onClick={() => setHistory([])}
+            disabled={loading}
+            style={{ background: "transparent", color: "var(--text)", border: "1px solid var(--border)", padding: "6px 12px" }}
+          >
+            New chat
+          </button>
+        </div>
+      )}
       <AskForm onAsk={handleAsk} loading={loading} />
       {/* Loader until the first answer text (or an error) arrives */}
       {loading && !answer && !error && <Loader message={loadingMessage} />}
