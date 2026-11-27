@@ -26,10 +26,24 @@ function useDocuments() {
     }
   }, []);
 
-  // Load the list once, when the component using this hook first appears
+  // Load the list once, when the component using this hook first appears.
+  // setState happens in the .then callback (React's recommended fetch-in-effect pattern),
+  // and `ignore` drops a late result if the component unmounted meanwhile
+  // (StrictMode mounts twice in development).
   useEffect(() => {
-    reload();
-  }, [reload]);
+    let ignore = false;
+    listDocuments()
+      .then((docs) => {
+        if (!ignore) setDocuments(docs);
+      })
+      .catch((err) => {
+        console.error("Could not load documents:", err);
+        if (!ignore) setError("Could not load documents.");
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const remove = useCallback(
     async (documentId) => {

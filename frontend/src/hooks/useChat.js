@@ -17,7 +17,8 @@ const MAX_TURN_CHARS = 4000;
 //     status:      "working" | "done" | "error"
 //     steps:       [] in agent mode (tool calls), null in normal mode
 //     action:      the agent's "confirm" event, or null
-//     actionState: null | "pending" | "busy" | "done" | "cancelled" | "failed" | "expired"
+//     actionState: null | "pending" | "busy" | "done" | "cancelled" | "expired"
+//                  | "failed" (could never succeed, e.g. the document was already deleted)
 //
 // Param:
 //   removeDocument(id) - does the REAL delete when the user confirms (from useDocuments)
@@ -25,6 +26,9 @@ function useChat({ removeDocument }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const nextId = useRef(1); // a counter that survives re-renders without causing one
+  // Message ids whose confirmed action is running RIGHT NOW. A ref updates instantly,
+  // unlike state, so a fast double-click can't start the same delete twice.
+  const actionsInFlight = useRef(new Set());
 
   function newId() {
     return nextId.current++;
@@ -109,6 +113,8 @@ function useChat({ removeDocument }) {
   async function confirmAction(messageId) {
     const message = messages.find((m) => m.id === messageId);
     if (!message || message.actionState !== "pending") return;
+    if (actionsInFlight.current.has(messageId)) return; // already running (double-click)
+    actionsInFlight.current.add(messageId);
 
     const { action } = message;
     updateMessage(messageId, () => ({ actionState: "busy" }));
@@ -121,11 +127,22 @@ function useChat({ removeDocument }) {
         }));
       }
     } catch (err) {
-      // Back to "pending": the card stays, so the user can retry or cancel
-      updateMessage(messageId, () => ({
-        actionState: "pending",
-        actionMessage: `Could not complete the action: ${err.message}`,
-      }));
+      if (err.status === 404) {
+        // Already gone (e.g. deleted from the sidebar first): a retry can never work,
+        // so close the card instead of offering one.
+        updateMessage(messageId, () => ({
+          actionState: "failed",
+          actionMessage: `"${action.filename}" was already deleted. Nothing else was changed.`,
+        }));
+      } else {
+        // Maybe temporary (network, server): back to "pending" so the user can retry or cancel
+        updateMessage(messageId, () => ({
+          actionState: "pending",
+          actionMessage: `Could not complete the action: ${err.message}`,
+        }));
+      }
+    } finally {
+      actionsInFlight.current.delete(messageId);
     }
   }
 

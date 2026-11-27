@@ -2,9 +2,11 @@ import { useRef, useState } from "react";
 
 // The two answer modes: label on the toggle + the hint shown next to it.
 const MODES = {
-  normal: { label: "Normal", hint: "Streams the answer from the top matching chunks." },
-  agent: { label: "Agent", hint: "Picks tools, remembers this chat. Enter to send, Shift+Enter for a new line." },
+  normal: { label: "Normal", hint: "Fast answer from the top matching chunks." },
+  agent: { label: "Agent", hint: "Picks tools and remembers this chat." },
 };
+// The keys work the same in both modes, so the tip is shown in both
+const KEYBOARD_TIP = "Enter to send, Shift+Enter for a new line.";
 
 const MAX_TEXTAREA_HEIGHT = 200; // px: grows with the text up to this, then scrolls
 
@@ -87,7 +89,9 @@ function Composer({ onAsk, loading }) {
             ))}
           </div>
 
-          <span className="hint muted">{MODES[mode].hint}</span>
+          <span className="hint muted">
+            {MODES[mode].hint} {KEYBOARD_TIP}
+          </span>
 
           <button type="submit" disabled={!canSend} aria-label="Send" style={{ width: 44, height: 44, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12, background: "var(--bubble)" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

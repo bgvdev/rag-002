@@ -31,7 +31,8 @@ function SourceList({ sources }) {
             <span style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {index + 1}. {source.filename}
             </span>
-            · {source.score.toFixed(2)}
+            {/* score may be missing in a malformed event: don't let one source crash the page */}
+            {typeof source.score === "number" && ` · ${source.score.toFixed(2)}`}
           </button>
         ))}
       </div>

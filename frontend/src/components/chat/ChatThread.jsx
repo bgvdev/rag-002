@@ -36,18 +36,32 @@ function ChatThread({ messages, loading, documentCount, onAsk, onConfirm, onCanc
 
   if (messages.length === 0) {
     return (
-      <div className="thread" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-        <EmptyState documentCount={documentCount} onPick={onAsk} disabled={loading} />
+      // Centred with margin:auto, NOT justify-content:center: if the window is too short,
+      // auto margins shrink to 0 and the top stays scrollable (center would push it off-screen).
+      <div className="thread" style={{ display: "flex", flexDirection: "column" }}>
+        <div style={{ marginBlock: "auto" }}>
+          <EmptyState documentCount={documentCount} onPick={onAsk} disabled={loading} />
+        </div>
       </div>
     );
   }
 
   // The newest assistant message: its steps start opened
-  const latestAssistantId = messages.findLast((m) => m.role === "assistant")?.id;
+  const latestAssistant = messages.findLast((m) => m.role === "assistant");
+  const latestAssistantId = latestAssistant?.id;
+
+  // ONE short announcement for screen readers when an answer finishes, instead of making
+  // the whole thread live (that would read out every streamed token as it arrives).
+  let announcement = "";
+  // The start of the answer makes each announcement different (identical text may not be re-read)
+  if (latestAssistant?.status === "done") announcement = `Answer ready: ${latestAssistant.content.slice(0, 150)}`;
+  if (latestAssistant?.status === "error") announcement = "The answer failed.";
 
   return (
-    // role="log": screen readers treat this as a chat log and read new messages politely
-    <div className="thread" ref={threadRef} onScroll={handleScroll} role="log" aria-live="polite">
+    <div className="thread" ref={threadRef} onScroll={handleScroll}>
+      <p className="visually-hidden" aria-live="polite">
+        {announcement}
+      </p>
       <div className="thread-inner">
         {messages.map((message) =>
           message.role === "user" ? (

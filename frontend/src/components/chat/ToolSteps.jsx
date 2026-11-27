@@ -6,9 +6,19 @@ import { getToolInfo } from "../../utils/toolInfo";
 // Props:
 //   steps       - [{ round, tool, arguments }, ...]
 //                 null/undefined = normal mode (not the agent) -> show nothing
-//   defaultOpen - start opened? (only the FIRST render; after that the user decides)
+//   defaultOpen - opened or not. When it CHANGES (e.g. a newer answer arrives and
+//                 this one is no longer the latest), the list follows it;
+//                 in between, the user's own clicks decide.
 function ToolSteps({ steps, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
+
+  // React's "adjust state when a prop changes" pattern: compare with the previous
+  // value DURING render (no useEffect, so there's no extra render with the old state).
+  const [prevDefaultOpen, setPrevDefaultOpen] = useState(defaultOpen);
+  if (defaultOpen !== prevDefaultOpen) {
+    setPrevDefaultOpen(defaultOpen);
+    setOpen(defaultOpen);
+  }
 
   if (!steps) {
     return null; // normal (non-agent) answer: there are no steps at all
