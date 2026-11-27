@@ -1,3 +1,13 @@
+// One icon per agent tool.
+// Unknown tools (e.g. a new backend tool not added here yet) fall back to 🔧.
+const TOOL_ICONS = {
+  search_documents: "🔍",
+  list_documents: "📂",
+  read_document: "📖",
+  get_neighbouring_chunks: "🧩",
+  delete_document: "🗑️",
+};
+
 // Shows the tool calls the agent made, so you can see HOW it found the answer.
 // Props:
 //   steps - [{ round, tool, arguments }, ...] from POST /chat/agent
@@ -16,9 +26,9 @@ function ToolSteps({ steps }) {
       <strong>Agent steps</strong>
       <ol style={{ marginTop: 6 }}>
         {steps.map((step, index) => (
-          // index is fine as key: this list is replaced, never reordered or edited
+          // index is fine as key: steps are only ever appended, never reordered or removed
           <li key={index}>
-            <span className="muted">Round {step.round}:</span> 🔍 {step.tool}{" "}
+            <span className="muted">Round {step.round}:</span> {TOOL_ICONS[step.tool] || "🔧"} {step.tool}{" "}
             <code>{formatArguments(step.arguments)}</code>
           </li>
         ))}
