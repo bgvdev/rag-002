@@ -100,6 +100,28 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_document",
+            "description": (
+                "Ask to delete one uploaded document and all its chunks. "
+                " inThis does NOT delete anything by itself: the user must confirm the app. "
+                "Only use this when the user clearly asks to delete or remove a document. "
+                "Get the document_id from list_documents first."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "integer",
+                        "description": "The document_id from list_documents.",
+                    },
+                },
+                "required": ["document_id"],
+            },
+        },
+    },
 ]
 
 
@@ -171,12 +193,34 @@ async def get_neighbouring_chunks(db: AsyncSession, chunk_id: int, window: int =
     }
 
 
+async def delete_document(db: AsyncSession, document_id: int) -> dict:
+    """A PROPOSAL, not an action. Human-in-the-loop: the LLM can only ask;
+    the real delete happens when the user clicks Confirm (DELETE /documents/{id})."""
+    document = await document_repository.get_by_id(db, int(document_id))
+    if document is None:
+        return {"error": f"No document with document_id {document_id}. Call list_documents to see valid ids."}
+
+    # Nothing is deleted here. The agent loop sees "needs_confirmation"
+    # and sends a "confirm" event to the UI, which shows Delete / Cancel buttons.
+    return {
+        "needs_confirmation": True,
+        "action": "delete_document",
+        "document_id": document.document_id,
+        "filename": document.filename,
+        "message": (
+            "NOT deleted yet. The user will see a confirmation button in the app. "
+            "Tell the user to confirm the deletion there."
+        ),
+    }
+
+
 # Map tool name (string from the LLM) -> Python function
 TOOL_FUNCTIONS = {
     "search_documents": search_documents,
     "list_documents": list_documents,
     "read_document": read_document,
     "get_neighbouring_chunks": get_neighbouring_chunks,
+    "delete_document": delete_document,
 }
 
 
