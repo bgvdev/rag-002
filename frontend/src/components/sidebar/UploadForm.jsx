@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { uploadDocument } from "../api";
+import { uploadDocument } from "../../api";
 
 // File picker + Upload button.
 // Props:
