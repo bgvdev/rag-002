@@ -83,6 +83,14 @@ button {
   cursor: pointer;
 }
 
+/* Secondary (outline) button: for the "safe" or less important choice,
+   e.g. Cancel next to Delete, or New chat */
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
