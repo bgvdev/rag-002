@@ -13,7 +13,10 @@ logging.basicConfig(
 
 # Create the FastAPI application
 # (database tables are created/updated by Alembic: run "alembic upgrade head")
-app = FastAPI(title="RAG API")
+app = FastAPI(
+    title="DocChat API",
+    description="Chat with your documents. Every answer cites its source.",
+)
 
 # CORS: allow the React dev server (Vite runs on port 5173) to call this API
 app.add_middleware(

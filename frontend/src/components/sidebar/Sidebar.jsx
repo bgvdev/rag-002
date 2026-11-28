@@ -23,7 +23,7 @@ function Sidebar({ documents, documentsError, onUploaded, onDeleteDocument, onNe
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h1>RAG Chat</h1>
+        <h1>DocChat</h1>
         <BackendStatus />
       </div>
 
