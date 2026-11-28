@@ -1,10 +1,12 @@
-# RAG Chat
+# DocChat
 
-Chat with your own `.txt` and `.pdf` files. Answers come only from your documents and list their sources.
+**Chat with your documents. Every answer cites its source.**
+
+Upload your own `.txt` and `.pdf` files and ask questions about them. Answers come only from your documents and list their sources.
 
 Built with FastAPI, PostgreSQL + pgvector, React, and OpenRouter. The agent uses plain tool calling, with no LangChain or LangGraph.
 
-![RAG Chat](docs/screenshots/chat-desktop.png)
+![DocChat](docs/screenshots/chat-desktop.png)
 
 ## Two answer modes
 
